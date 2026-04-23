@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Login | SVV</title>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .login-page {
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: var(--bg-color);
+        }
+        .login-card {
+            width: 100%;
+            max-width: 400px;
+        }
+        .btn { width: 100%; border: none; cursor: pointer; }
+        .error-msg { color: #ff4b2b; font-size: 0.85rem; margin-top: 10px; display: none; }
+    </style>
+</head>
+<body class="login-page">
+    <div id="custom-cursor"></div>
+    <div class="login-card glass-card">
+        <div style="text-align: center; margin-bottom: 20px;">
+            <img src="logo.png" alt="SVV Logo" style="height: 90px;">
+        </div>
+        <h2 style="margin-bottom: 30px; text-align: center;">Admin Login</h2>
+        <form id="login-form">
+            <div class="form-group">
+                <label>Username</label>
+                <input type="text" id="username" required>
+            </div>
+            <div class="form-group">
+                <label>Password</label>
+                <div style="position: relative;">
+                    <input type="password" id="password" required style="padding-right: 45px;">
+                    <span id="togglePassword" style="position: absolute; right: 15px; top: 50%; transform: translateY(-50%); cursor: pointer; opacity: 0.6; color: var(--accent-secondary);">
+                        <i data-lucide="eye"></i>
+                    </span>
+                </div>
+            </div>
+            <button type="submit" class="btn primary-btn">Login to Dashboard</button>
+            <p id="error" class="error-msg">Invalid username or password</p>
+        </form>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.0/lucide.min.js"></script>
+    <script>
+        lucide.createIcons();
+
+        const togglePassword = document.querySelector('#togglePassword');
+        const password = document.querySelector('#password');
+
+        togglePassword.addEventListener('click', function (e) {
+            const type = password.getAttribute('type') === 'password' ? 'text' : 'password';
+            password.setAttribute('type', type);
+            // Toggle icon
+            this.innerHTML = type === 'password' ? '<i data-lucide="eye"></i>' : '<i data-lucide="eye-off"></i>';
+            lucide.createIcons();
+        });
+
+        document.getElementById('login-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            const error = document.getElementById('error');
+
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ username, password })
+            });
+
+            if (response.ok) {
+                window.location.href = '/dashboard.html';
+            } else {
+                error.style.display = 'block';
+            }
+        });
+    </script>
+</body>
+</html>
