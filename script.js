@@ -3,64 +3,39 @@ document.addEventListener('DOMContentLoaded', () => {
     if (window.lucide) {
         lucide.createIcons();
     }
-    // Custom Cursor
-    const cursor = document.getElementById('custom-cursor');
-    
-    document.addEventListener('mousemove', (e) => {
-        cursor.style.left = e.clientX + 'px';
-        cursor.style.top = e.clientY + 'px';
-    });
-
-    // Scale cursor on links
-    const links = document.querySelectorAll('a, button, input, textarea');
-    links.forEach(link => {
-        link.addEventListener('mouseenter', () => {
-            cursor.style.transform = 'scale(2.5)';
-            cursor.style.background = 'rgba(255, 255, 255, 0.1)';
-            cursor.style.border = '1px solid white';
-        });
-        link.addEventListener('mouseleave', () => {
-            cursor.style.transform = 'scale(1)';
-            cursor.style.background = 'white';
-            cursor.style.border = 'none';
-        });
-    });
 
     // Intersection Observer for Reveal Animations
-    const observerOptions = {
-        threshold: 0.1,
-        rootMargin: '0px 0px -50px 0px'
-    };
+    const revealEls = document.querySelectorAll('.glass-card, .section-header');
+    if (revealEls.length > 0) {
+        const observerOptions = {
+            threshold: 0.1,
+            rootMargin: '0px 0px -50px 0px'
+        };
 
-    const observer = new IntersectionObserver((entries) => {
-        entries.forEach(entry => {
-            if (entry.isIntersecting) {
-                entry.target.classList.add('reveal-active');
-                observer.unobserve(entry.target);
-            }
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    entry.target.classList.add('reveal-active');
+                    observer.unobserve(entry.target);
+                }
+            });
+        }, observerOptions);
+
+        revealEls.forEach(el => {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(30px)';
+            el.style.transition = 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)';
+            observer.observe(el);
         });
-    }, observerOptions);
 
-    // Apply reveal classes
-    document.querySelectorAll('.glass-card, .section-header').forEach(el => {
-        el.style.opacity = '0';
-        el.style.transform = 'translateY(30px)';
-        el.style.transition = 'all 0.8s cubic-bezier(0.16, 1, 0.3, 1)';
-        observer.observe(el);
-    });
-
-    // CSS for reveal active
-    const style = document.createElement('style');
-    style.innerHTML = `
-        .reveal-active {
-            opacity: 1 !important;
-            transform: translateY(0) !important;
-        }
-    `;
-    document.head.appendChild(style);
+        const style = document.createElement('style');
+        style.innerHTML = `.reveal-active { opacity: 1 !important; transform: translateY(0) !important; }`;
+        document.head.appendChild(style);
+    }
 
     // Form Handling
     const contactForm = document.getElementById('contact-form');
+    if (contactForm) {
         contactForm.addEventListener('submit', async (e) => {
             e.preventDefault();
             const submitBtn = contactForm.querySelector('.submit-btn');
@@ -80,22 +55,23 @@ document.addEventListener('DOMContentLoaded', () => {
             submitBtn.disabled = true;
 
             try {
-                const response = await fetch('/api/contact', {
+                const response = await fetch('api/contact', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(formData)
                 });
 
                 if (response.ok) {
-                    submitBtn.innerText = 'Message Received';
+                    submitBtn.innerText = 'Transmission Successful';
                     submitBtn.style.background = '#00d4ff';
                     contactForm.reset();
                 } else {
-                    throw new Error('Server error');
+                    throw new Error('Server returned error status');
                 }
             } catch (err) {
-                submitBtn.innerText = 'Error! Try Again';
-                submitBtn.style.background = '#ff4b2b';
+                console.error('Transmission Error:', err);
+                submitBtn.innerText = 'Error: System Offline';
+                submitBtn.style.background = '#ff3b3b';
             }
 
             setTimeout(() => {
@@ -104,35 +80,32 @@ document.addEventListener('DOMContentLoaded', () => {
                 submitBtn.disabled = false;
             }, 3000);
         });
+    }
 
     // Smooth Navigation highlighting
     const sections = document.querySelectorAll('section');
     const navLinks = document.querySelectorAll('.nav-links a');
 
-    window.addEventListener('scroll', () => {
-        let current = '';
-        sections.forEach(section => {
-            const sectionTop = section.offsetTop;
-            const sectionHeight = section.clientHeight;
-            if (pageYOffset >= sectionTop - 150) {
-                current = section.getAttribute('id');
-            }
+    if (sections.length > 0 && navLinks.length > 0) {
+        window.addEventListener('scroll', () => {
+            let current = '';
+            sections.forEach(section => {
+                const sectionTop = section.offsetTop;
+                if (window.pageYOffset >= sectionTop - 150) {
+                    current = section.getAttribute('id');
+                }
+            });
+
+            navLinks.forEach(link => {
+                link.classList.remove('active');
+                if (link.getAttribute('href').includes(current)) {
+                    link.classList.add('active');
+                }
+            });
         });
 
-        navLinks.forEach(link => {
-            link.classList.remove('active');
-            if (link.getAttribute('href').includes(current)) {
-                link.classList.add('active');
-            }
-        });
-    });
-
-    // Add active style
-    const navStyle = document.createElement('style');
-    navStyle.innerHTML = `
-        .nav-links a.active {
-            color: var(--accent-secondary) !important;
-        }
-    `;
-    document.head.appendChild(navStyle);
+        const navStyle = document.createElement('style');
+        navStyle.innerHTML = `.nav-links a.active { color: var(--accent-secondary) !important; }`;
+        document.head.appendChild(navStyle);
+    }
 });

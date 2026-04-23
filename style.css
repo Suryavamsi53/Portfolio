@@ -14,7 +14,6 @@
     margin: 0;
     padding: 0;
     box-sizing: border-box;
-    cursor: none; /* Custom cursor */
 }
 
 html {
@@ -31,24 +30,6 @@ body {
 
 h1, h2, h3, .logo {
     font-family: 'Outfit', sans-serif;
-}
-
-/* Custom Cursor */
-#custom-cursor {
-    width: 20px;
-    height: 20px;
-    background: var(--text-primary);
-    border-radius: 50%;
-    position: fixed;
-    pointer-events: none;
-    z-index: 9999;
-    mix-blend-mode: difference;
-    transition: transform 0.1s ease;
-    display: none;
-}
-
-@media (pointer: fine) {
-    #custom-cursor { display: block; }
 }
 
 /* Navigation */
@@ -460,8 +441,40 @@ footer {
     animation: scrollMove 2s infinite;
 }
 
-@keyframes scrollMove {
-    0% { opacity: 0; transform: translate(-50%, 0); }
-    50% { opacity: 1; }
-    100% { opacity: 0; transform: translate(-50%, 15px); }
+/* Custom Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: rgba(0, 0, 0, 0.2);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--glass-border);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
+
+/* Dashboard Specific Improvements */
+.msg-body {
+    white-space: pre-wrap;
+    word-break: break-word;
+    background: rgba(255, 255, 255, 0.02);
+    padding: 30px;
+    border-radius: 15px;
+    border: 1px solid var(--glass-border);
+    margin: 20px 0;
+}
+
+.viewer-header h2 {
+    font-size: 2.2rem;
+    background: linear-gradient(135deg, white, var(--text-secondary));
+    background-clip: text;
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 5px;
 }

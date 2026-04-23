@@ -2,7 +2,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -15,12 +14,36 @@ import (
 
 // Configurations
 var (
-	jwtKey       = []byte("your_super_secret_key_change_me") // In production, use environment variables
-	adminUser    = "admin"
-	adminHash, _ = bcrypt.GenerateFromPassword([]byte("admin123"), bcrypt.DefaultCost) // Default password: admin123
+	jwtKey       []byte
+	adminUser    string
+	adminHash    []byte
 	messagesFile = "messages.json"
 	mu           sync.Mutex
 )
+
+func init() {
+	secret := os.Getenv("JWT_SECRET")
+	if secret == "" {
+		secret = "svv-portfolio-secure-random-key-2026"
+		log.Println("WARNING: JWT_SECRET not set, using default.")
+	}
+	jwtKey = []byte(secret)
+
+	adminUser = os.Getenv("ADMIN_USER")
+	if adminUser == "" {
+		adminUser = "Surya"
+	}
+
+	pass := os.Getenv("ADMIN_PASS")
+	if pass == "" {
+		pass = "suryavamsi"
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
+	if err != nil {
+		log.Fatalf("Failed to generate admin hash: %v", err)
+	}
+	adminHash = hash
+}
 
 type Message struct {
 	Name    string    `json:"name"`
@@ -94,11 +117,14 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Simple check against hardcoded admin
+	// Simple check against admin credentials
 	if creds.Username != adminUser || bcrypt.CompareHashAndPassword(adminHash, []byte(creds.Password)) != nil {
+		log.Printf("Failed login attempt for user: %s", creds.Username)
 		w.WriteHeader(http.StatusUnauthorized)
 		return
 	}
+
+	log.Printf("Successful login for user: %s", creds.Username)
 
 	expirationTime := time.Now().Add(24 * time.Hour)
 	claims := &Claims{
@@ -158,7 +184,7 @@ func handleContact(w http.ResponseWriter, r *http.Request) {
 
 	finalData, _ := json.MarshalIndent(messages, "", "  ")
 	os.WriteFile(messagesFile, finalData, 0644)
-	
+	log.Printf("Received transmission from %s (%s)", msg.Name, msg.Email)
 	w.WriteHeader(http.StatusOK)
 }
 
@@ -198,6 +224,13 @@ func main() {
 	http.HandleFunc("/api/messages", authenticate(handleGetMessages))
 	http.HandleFunc("/api/messages/update", authenticate(handleUpdateMessages))
 
-	fmt.Println("🚀 Secure Mail Backend running at http://localhost:8080")
-	log.Fatal(http.ListenAndServe(":8080", nil))
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8001"
+	}
+
+	log.Printf("SVV Portfolio Backend starting on http://localhost:%s", port)
+	if err := http.ListenAndServe(":"+port, nil); err != nil {
+		log.Fatalf("Error starting server: %s", err)
+	}
 }
