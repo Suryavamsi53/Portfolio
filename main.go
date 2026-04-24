@@ -192,7 +192,8 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		Expires:  expirationTime,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   false, // Set to true in real production with HTTPS
+		Secure:   true, // Enforce HTTPS in production
+		SameSite: http.SameSiteLaxMode,
 	})
 
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
