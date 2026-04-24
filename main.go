@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -9,6 +11,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	_ "github.com/lib/pq"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -19,6 +22,7 @@ var (
 	adminHash    []byte
 	messagesFile = "messages.json"
 	mu           sync.Mutex
+	db           *sql.DB
 )
 
 func init() {
@@ -43,9 +47,50 @@ func init() {
 		log.Fatalf("Failed to generate admin hash: %v", err)
 	}
 	adminHash = hash
+
+	// Initialize Database if URL is provided
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL != "" {
+		var err error
+		db, err = sql.Open("postgres", dbURL)
+		if err != nil {
+			log.Printf("Failed to connect to database: %v. Falling back to JSON.", err)
+		} else {
+			err = db.Ping()
+			if err != nil {
+				log.Printf("Database ping failed: %v. Falling back to JSON.", err)
+				db = nil
+			} else {
+				log.Println("Connected to PostgreSQL database.")
+				createTable()
+			}
+		}
+	} else {
+		log.Println("No DATABASE_URL found. Using messages.json for storage.")
+	}
+}
+
+func createTable() {
+	query := `
+	CREATE TABLE IF NOT EXISTS messages (
+		id SERIAL PRIMARY KEY,
+		name TEXT,
+		email TEXT,
+		phone TEXT,
+		company TEXT,
+		region TEXT,
+		country TEXT,
+		message TEXT,
+		time TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);`
+	_, err := db.Exec(query)
+	if err != nil {
+		log.Fatalf("Failed to create messages table: %v", err)
+	}
 }
 
 type Message struct {
+	ID      int       `json:"id,omitempty"`
 	Name    string    `json:"name"`
 	Email   string    `json:"email"`
 	Phone   string    `json:"phone"`
@@ -142,27 +187,48 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	http.SetCookie(w, &http.Cookie{
-		Name:    "token",
-		Value:   tokenString,
-		Expires: expirationTime,
-		Path:    "/",
+		Name:     "token",
+		Value:    tokenString,
+		Expires:  expirationTime,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   false, // Set to true in real production with HTTPS
 	})
 
 	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
 }
 
 func handleGetMessages(w http.ResponseWriter, r *http.Request) {
-	mu.Lock()
-	defer mu.Unlock()
+	var messages []Message
 
-	data, err := os.ReadFile(messagesFile)
-	if err != nil {
-		w.WriteHeader(http.StatusNotFound)
-		return
+	if db != nil {
+		rows, err := db.Query("SELECT id, name, email, phone, company, region, country, message, time FROM messages ORDER BY time DESC")
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		defer rows.Close()
+
+		for rows.Next() {
+			var m Message
+			err := rows.Scan(&m.ID, &m.Name, &m.Email, &m.Phone, &m.Company, &m.Region, &m.Country, &m.Message, &m.Time)
+			if err != nil {
+				log.Printf("Error scanning row: %v", err)
+				continue
+			}
+			messages = append(messages, m)
+		}
+	} else {
+		mu.Lock()
+		data, err := os.ReadFile(messagesFile)
+		mu.Unlock()
+		if err == nil {
+			json.Unmarshal(data, &messages)
+		}
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(data)
+	json.NewEncoder(w).Encode(messages)
 }
 
 func handleContact(w http.ResponseWriter, r *http.Request) {
@@ -174,16 +240,27 @@ func handleContact(w http.ResponseWriter, r *http.Request) {
 	json.NewDecoder(r.Body).Decode(&msg)
 	msg.Time = time.Now()
 
-	mu.Lock()
-	defer mu.Unlock()
+	if db != nil {
+		query := `INSERT INTO messages (name, email, phone, company, region, country, message, time) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+		_, err := db.Exec(query, msg.Name, msg.Email, msg.Phone, msg.Company, msg.Region, msg.Country, msg.Message, msg.Time)
+		if err != nil {
+			log.Printf("Database error saving message: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	} else {
+		mu.Lock()
+		defer mu.Unlock()
 
-	var messages []Message
-	data, _ := os.ReadFile(messagesFile)
-	json.Unmarshal(data, &messages)
-	messages = append(messages, msg)
+		var messages []Message
+		data, _ := os.ReadFile(messagesFile)
+		json.Unmarshal(data, &messages)
+		messages = append(messages, msg)
 
-	finalData, _ := json.MarshalIndent(messages, "", "  ")
-	os.WriteFile(messagesFile, finalData, 0644)
+		finalData, _ := json.MarshalIndent(messages, "", "  ")
+		os.WriteFile(messagesFile, finalData, 0644)
+	}
+
 	log.Printf("Received transmission from %s (%s)", msg.Name, msg.Email)
 	w.WriteHeader(http.StatusOK)
 }
@@ -194,22 +271,31 @@ func handleUpdateMessages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
+		ID    int `json:"id"`
 		Index int `json:"index"`
 	}
 	json.NewDecoder(r.Body).Decode(&req)
 
-	mu.Lock()
-	defer mu.Unlock()
+	if db != nil {
+		_, err := db.Exec("DELETE FROM messages WHERE id = $1", req.ID)
+		if err != nil {
+			log.Printf("Database error deleting message: %v", err)
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+	} else {
+		mu.Lock()
+		defer mu.Unlock()
 
-	var messages []Message
-	data, _ := os.ReadFile(messagesFile)
-	json.Unmarshal(data, &messages)
+		var messages []Message
+		data, _ := os.ReadFile(messagesFile)
+		json.Unmarshal(data, &messages)
 
-	if req.Index >= 0 && req.Index < len(messages) {
-		// New slice without the deleted item
-		messages = append(messages[:req.Index], messages[req.Index+1:]...)
-		finalData, _ := json.MarshalIndent(messages, "", "  ")
-		os.WriteFile(messagesFile, finalData, 0644)
+		if req.Index >= 0 && req.Index < len(messages) {
+			messages = append(messages[:req.Index], messages[req.Index+1:]...)
+			finalData, _ := json.MarshalIndent(messages, "", "  ")
+			os.WriteFile(messagesFile, finalData, 0644)
+		}
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -229,8 +315,10 @@ func main() {
 		port = "8001"
 	}
 
-	log.Printf("SVV Portfolio Backend starting on http://localhost:%s", port)
-	if err := http.ListenAndServe(":"+port, nil); err != nil {
+	log.Printf("SVV Portfolio Backend starting on port %s", port)
+	serverURL := fmt.Sprintf(":%s", port)
+	if err := http.ListenAndServe(serverURL, nil); err != nil {
 		log.Fatalf("Error starting server: %s", err)
 	}
 }
+
