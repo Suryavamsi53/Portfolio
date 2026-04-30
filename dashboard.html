@@ -131,6 +131,9 @@
                 <button class="tab-btn" onclick="switchView('map')" id="tab-map">
                     <i data-lucide="globe" style="width: 18px;"></i> Live Map
                 </button>
+                <button class="tab-btn" onclick="switchView('employees')" id="tab-employees">
+                    <i data-lucide="users" style="width: 18px;"></i> Employees
+                </button>
             </div>
             
             <div id="mini-map-container">
@@ -158,7 +161,40 @@
                 </div>
             </div>
         </section>
+
+        <section id="employees-view" style="display: none; padding: 40px; overflow-y: auto; background: var(--bg-color); width: 100%;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid var(--glass-border); padding-bottom: 20px;">
+                <h2 style="font-family: 'Outfit', sans-serif;">Employee Directory & Performance</h2>
+                <button class="btn" style="background: var(--accent-secondary); color: #000; font-weight: 700; border-radius: 8px;" onclick="openAddEmployeeModal()">+ Add Employee</button>
+            </div>
+            
+            <div id="employees-list" style="display: grid; gap: 20px; grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));">
+                <!-- Employee cards injected here -->
+            </div>
+        </section>
     </main>
+
+    <!-- Add Employee Modal -->
+    <div id="employee-modal" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.8); z-index:9999; justify-content:center; align-items:center;">
+        <div class="glass-card" style="width: 400px; padding: 30px;">
+            <h3 style="margin-bottom: 20px;">Add Employee</h3>
+            <form id="add-employee-form">
+                <div class="form-group" style="margin-bottom: 15px;"><label style="display:block; margin-bottom:5px;">Username</label><input type="text" id="emp-username" required style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: #fff; border-radius: 5px;"></div>
+                <div class="form-group" style="margin-bottom: 15px;"><label style="display:block; margin-bottom:5px;">Password</label><input type="password" id="emp-password" required style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: #fff; border-radius: 5px;"></div>
+                <div class="form-group" style="margin-bottom: 15px;"><label style="display:block; margin-bottom:5px;">Designation</label><input type="text" id="emp-designation" placeholder="e.g. Senior Dev" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: #fff; border-radius: 5px;"></div>
+                <div class="form-group" style="margin-bottom: 15px;"><label style="display:block; margin-bottom:5px;">Role</label>
+                    <select id="emp-role" style="width: 100%; padding: 10px; background: rgba(0,0,0,0.3); border: 1px solid var(--glass-border); color: #fff; border-radius: 5px;">
+                        <option value="employee">Employee</option>
+                        <option value="admin">Admin</option>
+                    </select>
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button type="button" class="btn" style="background:transparent; border: 1px solid var(--glass-border); color: #fff;" onclick="document.getElementById('employee-modal').style.display='none'">Cancel</button>
+                    <button type="submit" class="btn" style="background: var(--accent-secondary); color: #000;">Add</button>
+                </div>
+            </form>
+        </div>
+    </div>
 
     <script src="script.js"></script>
     <script>
@@ -315,20 +351,30 @@
         function switchView(view) {
             const viewer = document.getElementById('viewer');
             const mapView = document.getElementById('map-view');
+            const employeesView = document.getElementById('employees-view');
             const tabInbox = document.getElementById('tab-inbox');
             const tabMap = document.getElementById('tab-map');
+            const tabEmployees = document.getElementById('tab-employees');
+
+            viewer.style.display = 'none';
+            mapView.style.display = 'none';
+            if (employeesView) employeesView.style.display = 'none';
+            
+            tabInbox.classList.remove('active');
+            tabMap.classList.remove('active');
+            if (tabEmployees) tabEmployees.classList.remove('active');
 
             if (view === 'inbox') {
                 viewer.style.display = 'block';
-                mapView.style.display = 'none';
                 tabInbox.classList.add('active');
-                tabMap.classList.remove('active');
-            } else {
-                viewer.style.display = 'none';
+            } else if (view === 'map') {
                 mapView.style.display = 'block';
-                tabInbox.classList.remove('active');
                 tabMap.classList.add('active');
                 setTimeout(() => bigMap.invalidateSize(), 100);
+            } else if (view === 'employees') {
+                employeesView.style.display = 'block';
+                tabEmployees.classList.add('active');
+                fetchEmployees();
             }
         }
 
@@ -394,6 +440,85 @@
         function logout() {
             document.cookie = "token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;";
             window.location.href = 'login.html';
+        }
+
+        async function fetchEmployees() {
+            try {
+                const res = await fetch('/api/admin/employees');
+                if(res.ok) {
+                    const employees = await res.json();
+                    const list = document.getElementById('employees-list');
+                    if (!list) return;
+                    list.innerHTML = '';
+                    employees.forEach(emp => {
+                        const statusColor = emp.presence === 'Online' ? '#00e676' : '#9e9e9e';
+                        list.innerHTML += `
+                            <div class="glass-card" style="padding: 25px; display: grid; grid-template-columns: 1fr 2fr; gap: 20px; background: rgba(255,255,255,0.02); border-color: rgba(255,255,255,0.05);">
+                                <div>
+                                    <div style="display: flex; align-items: center; gap: 15px; margin-bottom: 10px;">
+                                        <div style="width: 40px; height: 40px; border-radius: 50%; background: var(--accent-secondary); color: #000; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 1.2rem;">
+                                            ${emp.username.charAt(0).toUpperCase()}
+                                        </div>
+                                        <div>
+                                            <h3 style="color: var(--text-primary); margin: 0;">${emp.username}</h3>
+                                            <p style="font-size: 0.9rem; color: var(--accent-secondary); margin: 0;">${emp.designation}</p>
+                                        </div>
+                                    </div>
+                                    <p style="font-size: 0.8rem; color: var(--text-secondary); text-transform: uppercase; margin-top: 15px; margin-bottom: 5px;">Role: ${emp.role}</p>
+                                    <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; font-weight: 600; color: ${statusColor}; background: rgba(0,0,0,0.3); padding: 5px 10px; border-radius: 20px; display: inline-flex;">
+                                        <span style="width: 8px; height: 8px; border-radius: 50%; background: ${statusColor}; box-shadow: 0 0 8px ${statusColor};"></span>
+                                        ${emp.presence}
+                                    </div>
+                                </div>
+                                <div style="border-left: 1px solid var(--glass-border); padding-left: 20px;">
+                                    <p style="color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; margin-bottom: 5px; font-weight: 600;">Responsibilities</p>
+                                    <p style="font-size: 0.95rem; margin-bottom: 20px; color: #ddd; line-height: 1.5;">${emp.responsibilities || 'N/A'}</p>
+                                    
+                                    <p style="color: var(--text-secondary); font-size: 0.8rem; text-transform: uppercase; margin-bottom: 5px; font-weight: 600;">Performance</p>
+                                    <div style="background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.03);">
+                                        <p style="font-size: 0.9rem; color: #ccc; line-height: 1.5; white-space: pre-line;">${emp.performance || 'N/A'}</p>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    });
+                }
+            } catch (e) { console.error(e); }
+        }
+
+        function openAddEmployeeModal() {
+            document.getElementById('employee-modal').style.display = 'flex';
+        }
+
+        const addEmpForm = document.getElementById('add-employee-form');
+        if (addEmpForm) {
+            addEmpForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const username = document.getElementById('emp-username').value;
+                const password = document.getElementById('emp-password').value;
+                const designation = document.getElementById('emp-designation').value;
+                const role = document.getElementById('emp-role').value;
+                
+                try {
+                    const res = await fetch('/api/admin/employees', {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            username, password, designation, role,
+                            presence: 'Offline',
+                            performance: 'Q1: N/A\nMonthly: Pending Evaluation',
+                            responsibilities: 'Pending Assignment'
+                        })
+                    });
+                    if(res.ok) {
+                        document.getElementById('employee-modal').style.display = 'none';
+                        document.getElementById('add-employee-form').reset();
+                        fetchEmployees();
+                    } else {
+                        alert('Failed to add employee');
+                    }
+                } catch (err) { console.error(err); }
+            });
         }
 
         // Initialize and start fetching

@@ -46,10 +46,14 @@ type InternalEmail struct {
 }
 
 type User struct {
-	ID           int    `json:"id"`
-	Username     string `json:"username"`
-	PasswordHash string `json:"-"`
-	Role         string `json:"role"`
+	ID               int    `json:"id"`
+	Username         string `json:"username"`
+	PasswordHash     string `json:"-"`
+	Role             string `json:"role"`
+	Designation      string `json:"designation"`
+	Presence         string `json:"presence"`
+	Performance      string `json:"performance"`
+	Responsibilities string `json:"responsibilities"`
 }
 
 func init() {
@@ -104,8 +108,13 @@ func createTables() {
 			id SERIAL PRIMARY KEY,
 			username TEXT UNIQUE NOT NULL,
 			password_hash TEXT NOT NULL,
-			role TEXT DEFAULT 'user'
+			role TEXT DEFAULT 'user',
+			designation TEXT DEFAULT 'Employee'
 		);`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS designation TEXT DEFAULT 'Employee';`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS presence TEXT DEFAULT 'Online';`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS performance TEXT DEFAULT 'Q1: Good, Monthly: Average';`,
+		`ALTER TABLE users ADD COLUMN IF NOT EXISTS responsibilities TEXT DEFAULT 'Standard tasks';`,
 		`CREATE TABLE IF NOT EXISTS messages (
 			id SERIAL PRIMARY KEY,
 			name TEXT,
@@ -153,7 +162,7 @@ func seedAdmin() {
 			pass = "suryavamsi"
 		}
 		hash, _ := bcrypt.GenerateFromPassword([]byte(pass), bcrypt.DefaultCost)
-		_, err = db.Exec("INSERT INTO users (username, password_hash, role) VALUES ($1, $2, $3)", adminUser, string(hash), "admin")
+		_, err = db.Exec("INSERT INTO users (username, password_hash, role, designation) VALUES ($1, $2, $3, $4)", adminUser, string(hash), "admin", "CEO & Founder")
 		if err != nil {
 			log.Printf("Failed to seed admin: %v", err)
 		} else {
@@ -238,10 +247,11 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 	// Check against database users if DB is available
 	var storedHash string
 	var role string
+	var designation string
 	authenticated := false
 
 	if db != nil {
-		err := db.QueryRow("SELECT password_hash, role FROM users WHERE username = $1", creds.Username).Scan(&storedHash, &role)
+		err := db.QueryRow("SELECT password_hash, role, designation FROM users WHERE username = $1", creds.Username).Scan(&storedHash, &role, &designation)
 		if err == nil {
 			if bcrypt.CompareHashAndPassword([]byte(storedHash), []byte(creds.Password)) == nil {
 				authenticated = true
@@ -252,6 +262,7 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		if creds.Username == adminUser && bcrypt.CompareHashAndPassword(adminHash, []byte(creds.Password)) == nil {
 			authenticated = true
 			role = "admin"
+			designation = "CEO & Founder"
 		}
 	}
 
@@ -288,7 +299,12 @@ func handleLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	json.NewEncoder(w).Encode(map[string]string{
+		"status": "success",
+		"role": role,
+		"designation": designation,
+		"username": creds.Username,
+	})
 }
 
 func handleGetMessages(w http.ResponseWriter, r *http.Request) {
@@ -454,6 +470,86 @@ func handleGetInternalEmails(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(emails)
 }
 
+func handleUserProfile(w http.ResponseWriter, r *http.Request) {
+	cookie, err := r.Cookie("token")
+	if err != nil {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	claims := &Claims{}
+	tkn, err := jwt.ParseWithClaims(cookie.Value, claims, func(token *jwt.Token) (interface{}, error) {
+		return jwtKey, nil
+	})
+
+	if err != nil || !tkn.Valid {
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var role, designation string
+	if db != nil {
+		db.QueryRow("SELECT role, designation FROM users WHERE username = $1", claims.Username).Scan(&role, &designation)
+	} else {
+		if claims.Username == adminUser {
+			role = "admin"
+			designation = "CEO & Founder"
+		} else {
+			role = "employee"
+			designation = "Employee"
+		}
+	}
+
+	json.NewEncoder(w).Encode(map[string]string{
+		"username": claims.Username,
+		"role": role,
+		"designation": designation,
+	})
+}
+
+func handleAdminEmployees(w http.ResponseWriter, r *http.Request) {
+	if r.Method == "GET" {
+		var users []User
+		if db != nil {
+			rows, err := db.Query("SELECT id, username, role, COALESCE(designation, 'Employee'), COALESCE(presence, 'Online'), COALESCE(performance, 'Q1: Good'), COALESCE(responsibilities, 'General') FROM users")
+			if err == nil {
+				defer rows.Close()
+				for rows.Next() {
+					var u User
+					err := rows.Scan(&u.ID, &u.Username, &u.Role, &u.Designation, &u.Presence, &u.Performance, &u.Responsibilities)
+					if err == nil {
+						users = append(users, u)
+					}
+				}
+			}
+		} else {
+			users = append(users, User{ID: 1, Username: adminUser, Role: "admin", Designation: "CEO & Founder", Presence: "Online", Performance: "Q1: Exceptional", Responsibilities: "Strategy"})
+		}
+		json.NewEncoder(w).Encode(users)
+		return
+	}
+
+	if r.Method == "POST" {
+		var req struct {
+			Username         string `json:"username"`
+			Password         string `json:"password"`
+			Role             string `json:"role"`
+			Designation      string `json:"designation"`
+			Presence         string `json:"presence"`
+			Performance      string `json:"performance"`
+			Responsibilities string `json:"responsibilities"`
+		}
+		json.NewDecoder(r.Body).Decode(&req)
+		
+		if db != nil {
+			hash, _ := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+			db.Exec("INSERT INTO users (username, password_hash, role, designation, presence, performance, responsibilities) VALUES ($1, $2, $3, $4, $5, $6, $7)",
+				req.Username, string(hash), req.Role, req.Designation, req.Presence, req.Performance, req.Responsibilities)
+		}
+		json.NewEncoder(w).Encode(map[string]string{"status": "success"})
+	}
+}
+
 func main() {
 	go handleMessages()
 
@@ -475,6 +571,8 @@ func main() {
 	http.HandleFunc("/api/messages", authenticate(handleGetMessages))
 	http.HandleFunc("/api/employee/emails", authenticate(handleGetInternalEmails))
 	http.HandleFunc("/api/messages/update", authenticate(handleUpdateMessages))
+	http.HandleFunc("/api/user/profile", handleUserProfile)
+	http.HandleFunc("/api/admin/employees", authenticate(handleAdminEmployees))
 
 	port := os.Getenv("PORT")
 	if port == "" {

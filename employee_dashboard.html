@@ -246,12 +246,12 @@
         </ul>
 
         <div class="user-profile">
-            <div class="avatar">S</div>
+            <div class="avatar" id="profile-avatar">S</div>
             <div>
-                <p style="font-weight: 600; font-size: 0.9rem;">Suryavamsi</p>
-                <p style="font-size: 0.75rem; color: var(--text-muted);">CEO & Founder</p>
+                <p style="font-weight: 600; font-size: 0.9rem;" id="profile-name">Loading...</p>
+                <p style="font-size: 0.75rem; color: var(--text-muted);" id="profile-role">Loading...</p>
             </div>
-            <a href="/logout" style="margin-left: auto; color: var(--text-muted);"><i class="fas fa-sign-out-alt"></i></a>
+            <a href="login.html" onclick="document.cookie='token=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;'; return true;" style="margin-left: auto; color: var(--text-muted);"><i class="fas fa-sign-out-alt"></i></a>
         </div>
     </aside>
 
@@ -425,8 +425,24 @@
             } catch (err) { console.error("Mail fetch error:", err); }
         }
 
+        // Fetch User Profile
+        async function fetchUserProfile() {
+            try {
+                const res = await fetch('/api/user/profile');
+                if (res.ok) {
+                    const profile = await res.json();
+                    document.getElementById('profile-name').innerText = profile.username;
+                    document.getElementById('profile-role').innerText = profile.designation;
+                    document.getElementById('profile-avatar').innerText = profile.username.charAt(0).toUpperCase();
+                } else {
+                    window.location.href = 'login.html';
+                }
+            } catch (err) { console.error("Profile fetch error:", err); }
+        }
+
         connectWS();
         fetchEmails();
+        fetchUserProfile();
     </script>
 </body>
 </html>

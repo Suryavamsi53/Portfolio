@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Admin Login | SVV</title>
+    <title>InfoAiEdge Login</title>
     <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;700&family=Inter:wght@400;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/lucide/0.263.0/lucide.min.js"></script>
@@ -28,7 +28,7 @@
         <div style="text-align: center; margin-bottom: 20px;">
             <img src="logo.png" alt="SVV Logo" style="height: 90px;">
         </div>
-        <h2 style="margin-bottom: 30px; text-align: center;">Admin Login</h2>
+        <h2 style="margin-bottom: 30px; text-align: center;">InfoAiEdge Login</h2>
         <form id="login-form">
             <div class="form-group">
                 <label>Username</label>
@@ -63,7 +63,12 @@
                     });
 
                     if (response.ok) {
-                        window.location.href = 'dashboard.html';
+                        const data = await response.json();
+                        if (data.role === 'admin') {
+                            window.location.href = 'dashboard.html';
+                        } else {
+                            window.location.href = 'employee_dashboard.html';
+                        }
                         return;
                     }
                     
